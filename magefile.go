@@ -73,6 +73,8 @@ func Build() error {
 		}
 	}
 
+	createDir(path.Join(pwd, "bin"))
+
 	if err = buildCmd("tauros_proxy", false); err != nil {
 		return err
 	}
