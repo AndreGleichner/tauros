@@ -1,7 +1,9 @@
 package main
 
 import (
+	"os"
 	"andre/tauros/api"
+	"andre/tauros/internal/conf"
 	"context"
 	"log"
 	"time"
@@ -9,12 +11,12 @@ import (
 	"google.golang.org/grpc"
 )
 
-const (
-	address = "localhost:50051"
-)
-
 func main() {
-	conn, err := grpc.Dial(address, grpc.WithInsecure())
+	if (len(os.Args) != 2) {
+		log.Fatal("You shall pass the target hostname.")
+	}
+	target := os.Args[1] + conf.Port
+	conn, err := grpc.Dial(target, grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}

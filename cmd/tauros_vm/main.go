@@ -6,16 +6,13 @@ import (
 
 	"google.golang.org/grpc"
 	"andre/tauros/api"
+	"andre/tauros/internal/conf"
 	"google.golang.org/grpc/reflection"
 	"andre/tauros/internal/server"
 )
 
-const (
-	port = ":50051"
-)
-
 func main() {
-	lis, err := net.Listen("tcp", port)
+	lis, err := net.Listen("tcp", conf.Port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
