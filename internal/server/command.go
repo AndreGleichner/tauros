@@ -38,7 +38,7 @@ import (
 // }
 
 // RunCommand executes a command-line relative to bin dir, streaming back stdout/stderr.
-func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunCommandServer) error {
+func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunCommandServer) (err error) {
 	log.Printf("RunCommand " + req.Cmd)
 
 	cmd := exec.Command(req.Cmd)
@@ -48,8 +48,6 @@ func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunComm
 	cmd.Stdin = os.Stdin
 
 	time.AfterFunc(time.Duration(req.Timeout.Seconds)*time.Second, func() { cmd.Process.Kill() })
-
-	var err error
 
 	defer func() {
 		r := recover()
@@ -140,9 +138,8 @@ func sendFinal(stream api.Tauros_RunCommandServer, exitCode int32) error {
 	return stream.Send(&cmdResp)
 }
 
-func stdStreamChannel(cmd *exec.Cmd, wg *sync.WaitGroup, errStream bool) (chan string, error) {
+func stdStreamChannel(cmd *exec.Cmd, wg *sync.WaitGroup, errStream bool) (c chan string, err error) {
 	var pipe io.ReadCloser
-	var err error
 
 	if errStream {
 		pipe, err = cmd.StderrPipe()
@@ -156,7 +153,7 @@ func stdStreamChannel(cmd *exec.Cmd, wg *sync.WaitGroup, errStream bool) (chan s
 		}
 	}
 
-	c := make(chan string)
+	c = make(chan string)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

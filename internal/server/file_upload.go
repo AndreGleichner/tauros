@@ -7,14 +7,14 @@ import (
 )
 
 // NegotiateUploadFiles shall be called before every RunCommand() to possibly upload (further) files via one or more UploadFile().
-func (s *TaurosServer) NegotiateUploadFiles(ctx context.Context, req *api.NegotiateUploadFilesReq) (*api.NegotiateUploadFilesResp, error) {
+func (s *TaurosServer) NegotiateUploadFiles(ctx context.Context, req *api.NegotiateUploadFilesReq) (resp *api.NegotiateUploadFilesResp, err error) {
 	log.Printf("NegotiateUploadFiles")
 
 	return &api.NegotiateUploadFilesResp{}, nil
 }
 
 // UploadFile uploads a single file to servers bin dir.
-func (s *TaurosServer) UploadFile(stream api.Tauros_UploadFileServer) error {
+func (s *TaurosServer) UploadFile(stream api.Tauros_UploadFileServer) (err error) {
 	log.Printf("UploadFile")
 
 	return stream.SendAndClose(&api.UploadFileResp{
