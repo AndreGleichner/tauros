@@ -114,7 +114,8 @@ message CommandRespStream {
     }
     message FinalStatus {
         int32       exitcode = 1;
-        bool        needs_reboot = 2;
+        string      err = 2;
+        bool        needs_reboot = 3;
     }
     oneof value {
         Output          output = 1;

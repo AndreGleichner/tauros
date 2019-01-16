@@ -3,11 +3,16 @@ package server
 import (
 	"andre/tauros/api"
 	"bufio"
+	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -29,7 +34,8 @@ import (
 //     }
 //     message FinalStatus {
 //         int32       exitcode = 1;
-//         bool        needs_reboot = 2;
+//         string      err = 2;
+//         bool        needs_reboot = 3;
 //     }
 //     oneof value {
 //         Output          output = 1;
@@ -47,23 +53,22 @@ func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunComm
 	cmd.Env = append(cmd.Env, req.Env...)
 	cmd.Stdin = os.Stdin
 
-	time.AfterFunc(time.Duration(req.Timeout.Seconds)*time.Second, func() { cmd.Process.Kill() })
+	doneCtx, ctxCancel := context.WithCancel(context.Background())
+	if req.Timeout.Seconds > 0 {
+		time.AfterFunc(time.Duration(req.Timeout.Seconds)*time.Second, func() { cmd.Process.Kill() })
+	}
 
 	defer func() {
 		r := recover()
 
-		if err != nil || r != nil {
-			cmd.Process.Kill()
-		}
-
 		if r != nil {
-			panic(r)
+			err = errors.New(fmt.Sprint("Recoverd ", r))
 		}
 	}()
 
 	var wg sync.WaitGroup
 
-	// Start goroutines that are going to be reading the lines out of stdout/stderr piping into returned channel
+	// Start 2 goroutines that are going to be reading the lines out of stdout/stderr piping into returned channel.
 	stdoutCh, err := stdStreamChannel(cmd, &wg, false)
 	if err != nil {
 		return err
@@ -73,53 +78,45 @@ func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunComm
 		return err
 	}
 
-	// Make sure after we exit we read the lines from stdout forever
-	// so they don't block since it is a pipe.
-	// The scanner goroutine above will close this, but track it with a wait
-	// group for completeness.
+	// Forward stdout/stderr from launched command back to the client.
 	wg.Add(1)
-	defer func() {
-		go func() {
-			defer wg.Done()
-			for range stdoutCh {
-			}
-			for range stderrCh {
-			}
-		}()
-	}()
-
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case line := <-stdoutCh:
-				if err := sendOutput(stream, line, false); err != nil {
+				if err = sendOutput(stream, line, false); err != nil {
 					return
 				}
 			case line := <-stderrCh:
-				if err := sendOutput(stream, line, true); err != nil {
+				if err = sendOutput(stream, line, true); err != nil {
 					return
 				}
+			case <-doneCtx.Done():
+				return
 			}
 		}
 	}()
 
-	debugMsgArgs := []interface{}{
-		"path", cmd.Path,
-	}
-
-	var exitCode int32
 	err = cmd.Run()
-	if err != nil {
-		debugMsgArgs = append(debugMsgArgs,
-			[]interface{}{"error", err.Error()}...)
 
-		log.Printf("Cmd exited ", debugMsgArgs...)
-		//exitCode = err
+	var exitCode int
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			ws := exitError.Sys().(syscall.WaitStatus)
+			exitCode = ws.ExitStatus()
+		} else {
+			exitCode = -1
+		}
 	}
+
+	// Wait some short time for possibly remaining stdout/stderr.
+	wg.Add(1)
+	time.AfterFunc(time.Second, func() { defer wg.Done(); ctxCancel() })
 
 	wg.Wait()
 
-	sendFinal(stream, exitCode)
+	sendFinal(stream, exitCode, err)
 
 	return err
 }
@@ -131,11 +128,20 @@ func sendOutput(stream api.Tauros_RunCommandServer, line string, isErr bool) err
 	return stream.Send(&cmdResp)
 }
 
-func sendFinal(stream api.Tauros_RunCommandServer, exitCode int32) error {
+func sendFinal(stream api.Tauros_RunCommandServer, exitCode int, err error) error {
+	pwd, _ := os.Getwd()
+	rebootMarkerFile := filepath.Join(pwd, "out/NeedReboot.marker")
+	needsReboot := fileExists(rebootMarkerFile)
+
 	cmdResp := api.CommandRespStream{Value: &api.CommandRespStream_FinalStatus_{
-		FinalStatus: &api.CommandRespStream_FinalStatus{Exitcode: exitCode, NeedsReboot: false}}}
+		FinalStatus: &api.CommandRespStream_FinalStatus{Exitcode: int32(exitCode), Err: err.Error(), NeedsReboot: needsReboot}}}
 
 	return stream.Send(&cmdResp)
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
 }
 
 func stdStreamChannel(cmd *exec.Cmd, wg *sync.WaitGroup, errStream bool) (c chan string, err error) {
