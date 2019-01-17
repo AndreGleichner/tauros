@@ -12,7 +12,7 @@ func (s *TaurosServer) Reboot(ctx context.Context, req *api.RebootReq) (resp *ap
 	log.Printf("Reboot")
 
 	resp = &api.RebootResp{}
-	err = Reboot()
+	err = reboot()
 
 	return
 }

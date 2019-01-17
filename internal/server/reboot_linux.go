@@ -65,10 +65,10 @@ import (
           is suspended (hibernated) to disk.  This option is available
           only if the kernel was configured with CONFIG_HIBERNATION.
 */
-func Reboot() (err error) {
+func reboot() (err error) {
 	//return syscall.Reboot(syscall.LINUX_REBOOT_CMD_RESTART)
 	if err = exec.Command("shutdown", "-r", "--no-wall").Run(); err != nil {
-		log.Printf("Failed to initiate reboot:", err)
+		log.Printf("Failed to initiate reboot: %v", err)
 	}
 	return
 }
