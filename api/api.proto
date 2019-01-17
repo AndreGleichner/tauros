@@ -57,17 +57,16 @@ message UploadFileReqStream {
     message Meta {
         string  filename = 1; // relative to bin dir
         int32   filesize = 2;
+        bytes   sha256 = 3;
     }
     message Chunk {
         bytes   data = 1;
-        int32   offset = 2;
     }
     oneof value {
         Meta    meta = 1;
         Chunk   chunk = 2;
     }
 }
-
 message UploadFileResp {
     string  err = 1; // empty : success
 }
@@ -77,10 +76,10 @@ message DownloadFileReq {
         string  filename = 1; // relative to out dir
     }
 }
-
 message DownloadFileRespStream {
     message Meta {
         int32   filesize = 1;
+        bytes   sha256 = 2;
     }
     message Chunk {
         bytes   data = 1;
@@ -105,7 +104,6 @@ message CommandReq {
     Duration        timeout = 2;
     repeated string env = 3;
 }
-
 message CommandRespStream {
     message Output {
         int64   timestamp = 1;
@@ -124,10 +122,8 @@ message CommandRespStream {
 }
 
 message RebootReq {
-
 }
 message RebootResp {
-    
 }
 
 

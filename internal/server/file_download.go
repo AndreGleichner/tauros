@@ -4,6 +4,9 @@ import (
 	"andre/tauros/api"
 	"context"
 	"log"
+	"os"
+	"path"
+	"path/filepath"
 )
 
 // message NegotiateDownloadFilesReq {
@@ -19,7 +22,26 @@ import (
 func (s *TaurosServer) NegotiateDownloadFiles(ctx context.Context, req *api.NegotiateDownloadFilesReq) (resp *api.NegotiateDownloadFilesResp, err error) {
 	log.Printf("NegotiateDownloadFiles")
 
-	return &api.NegotiateDownloadFilesResp{}, nil
+	pwd, _ := os.Getwd()
+	outDir := path.Join(pwd, "bin/out")
+	lenPrefix := len(outDir) + 1
+
+	resp = &api.NegotiateDownloadFilesResp{}
+
+	err = filepath.Walk(outDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		resp.Files = append(resp.Files, &api.NegotiateDownloadFilesResp_File{Filename: path[lenPrefix:], Sha256: fileSha256(path)})
+
+		return nil
+	})
+
+	return
 }
 
 // message DownloadFileReq {
@@ -27,7 +49,6 @@ func (s *TaurosServer) NegotiateDownloadFiles(ctx context.Context, req *api.Nego
 //         string  filename = 1; // relative to out dir
 //     }
 // }
-
 // message DownloadFileRespStream {
 //     message Meta {
 //         int32   filesize = 1;

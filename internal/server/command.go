@@ -25,7 +25,6 @@ import (
 //     Duration        timeout = 2;
 //     repeated string env = 3;
 // }
-
 // message CommandRespStream {
 //     message Output {
 //         int64   timestamp = 1;
@@ -138,11 +137,6 @@ func sendFinal(stream api.Tauros_RunCommandServer, exitCode int, err error) erro
 		FinalStatus: &api.CommandRespStream_FinalStatus{Exitcode: int32(exitCode), Err: err.Error(), NeedsReboot: needsReboot}}}
 
 	return stream.Send(&cmdResp)
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
 }
 
 func stdStreamChannel(cmd *exec.Cmd, wg *sync.WaitGroup, errStream bool) (c chan string, err error) {
