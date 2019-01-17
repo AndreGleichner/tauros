@@ -53,7 +53,6 @@ func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunComm
 	cmd.Env = append(cmd.Env, req.Env...)
 	cmd.Stdin = os.Stdin
 
-	doneCtx, ctxCancel := context.WithCancel(context.Background())
 	if req.Timeout.Seconds > 0 {
 		time.AfterFunc(time.Duration(req.Timeout.Seconds)*time.Second, func() { cmd.Process.Kill() })
 	}
@@ -77,6 +76,8 @@ func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunComm
 	if err != nil {
 		return err
 	}
+
+	doneCtx, ctxCancel := context.WithCancel(context.Background())
 
 	// Forward stdout/stderr from launched command back to the client.
 	wg.Add(1)
