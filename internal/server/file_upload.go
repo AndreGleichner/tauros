@@ -47,6 +47,7 @@ func (s *TaurosServer) NegotiateUploadFiles(ctx context.Context, req *api.Negoti
 //     message Meta {
 //         string  filename = 1; // relative to bin dir
 //         int32   filesize = 2;
+//         bytes   sha256 = 3;
 //     }
 //     message Chunk {
 //         bytes   data = 1;
@@ -98,8 +99,11 @@ func (s *TaurosServer) UploadFile(stream api.Tauros_UploadFileServer) (err error
 		} else {
 			sha256 := hasher.Sum(nil)
 
+			if meta != nil && !bytes.Equal(sha256, meta.Sha256) {
+				err = errors.New("invalid hash (meta)")
+			}
 			if meta != nil && !bytes.Equal(sha256, fileSha256(meta.Filename)) {
-				err = errors.New("invalid hash")
+				err = errors.New("invalid hash (file)")
 			}
 		}
 

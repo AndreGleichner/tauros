@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -19,11 +20,11 @@ import (
 // message CommandReq {
 //     // executable in cmd shall be relative to bin dir, as it gets executed with cur dir set to bin:
 //     // Rooted paths are rejected.
-//     // Paths containing "/../" are rejected.
-//     // Paths not beginning with ./ get prepended with ./
+//     // Paths containing "/../" are cleaned.
 //     string          cmd = 1;
-//     Duration        timeout = 2;
-//     repeated string env = 3;
+//     repeated string args = 2;
+//     Duration        timeout = 3;
+//     repeated string env = 4;
 // }
 // message CommandRespStream {
 //     message Output {
@@ -46,7 +47,27 @@ import (
 func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunCommandServer) (err error) {
 	log.Printf("RunCommand " + req.Cmd)
 
-	cmd := exec.Command(req.Cmd)
+	exitCode := -1
+
+	defer func() {
+		sendFinal(stream, exitCode, err)
+	}()
+
+	if filepath.IsAbs(req.Cmd) {
+		err = errors.New("Cmd must not be abs")
+		return
+	}
+
+	pwd, _ := os.Getwd()
+	os.Chdir(path.Join(pwd, "bin"))
+
+	var cmdline string
+	if cmdline, err = filepath.Abs(req.Cmd); err != nil {
+		return
+	}
+
+	cmd := exec.Command(cmdline)
+	cmd.Args = append(cmd.Args, req.Args...)
 
 	cmd.Env = append(cmd.Env, os.Environ()...)
 	cmd.Env = append(cmd.Env, req.Env...)
@@ -69,11 +90,11 @@ func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunComm
 	// Start 2 goroutines that are going to be reading the lines out of stdout/stderr piping into returned channel.
 	stdoutCh, err := stdStreamChannel(cmd, &wg, false)
 	if err != nil {
-		return err
+		return
 	}
 	stderrCh, err := stdStreamChannel(cmd, &wg, true)
 	if err != nil {
-		return err
+		return
 	}
 
 	doneCtx, ctxCancel := context.WithCancel(context.Background())
@@ -100,7 +121,6 @@ func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunComm
 
 	err = cmd.Run()
 
-	var exitCode int
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			ws := exitError.Sys().(syscall.WaitStatus)
@@ -116,27 +136,25 @@ func (s *TaurosServer) RunCommand(req *api.CommandReq, stream api.Tauros_RunComm
 
 	wg.Wait()
 
-	sendFinal(stream, exitCode, err)
-
 	return err
 }
 
 func sendOutput(stream api.Tauros_RunCommandServer, line string, isErr bool) error {
-	cmdResp := api.CommandRespStream{Value: &api.CommandRespStream_Output_{
+	resp := api.CommandRespStream{Value: &api.CommandRespStream_Output_{
 		Output: &api.CommandRespStream_Output{Timestamp: time.Now().Unix(), IsErr: isErr, Line: line}}}
 
-	return stream.Send(&cmdResp)
+	return stream.Send(&resp)
 }
 
 func sendFinal(stream api.Tauros_RunCommandServer, exitCode int, err error) error {
 	pwd, _ := os.Getwd()
-	rebootMarkerFile := filepath.Join(pwd, "out/NeedReboot.marker")
+	rebootMarkerFile := filepath.Join(pwd, "out", "NeedReboot.marker")
 	needsReboot := fileExists(rebootMarkerFile)
 
-	cmdResp := api.CommandRespStream{Value: &api.CommandRespStream_FinalStatus_{
+	resp := api.CommandRespStream{Value: &api.CommandRespStream_FinalStatus_{
 		FinalStatus: &api.CommandRespStream_FinalStatus{Exitcode: int32(exitCode), Err: err.Error(), NeedsReboot: needsReboot}}}
 
-	return stream.Send(&cmdResp)
+	return stream.Send(&resp)
 }
 
 func stdStreamChannel(cmd *exec.Cmd, wg *sync.WaitGroup, errStream bool) (c chan string, err error) {

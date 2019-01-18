@@ -12,7 +12,7 @@ service Tauros {
     // UploadFile uploads a single file to servers bin dir.
     rpc UploadFile(stream UploadFileReqStream) returns (UploadFileResp) {}
 
-    // DownloadFile downloads a single file from servers out dir.
+    // DownloadFile downloads a single file from servers bin/out dir.
     rpc DownloadFile(DownloadFileReq) returns (stream DownloadFileRespStream) {}
 
     // RunCommand executes a command-line relative to bin dir, streaming back stdout/stderr.
@@ -47,7 +47,7 @@ message NegotiateDownloadFilesReq {
 }
 message NegotiateDownloadFilesResp {
     message File {
-        string  filename = 1; // relative to out dir
+        string  filename = 1; // relative to bin/out dir
         bytes   sha256 = 2;
     }
     repeated File   files = 1; // files the server wants the client to download
@@ -72,21 +72,18 @@ message UploadFileResp {
 }
 
 message DownloadFileReq {
-    message Meta {
-        string  filename = 1; // relative to out dir
-    }
+    string  filename = 1; // relative to bin/out dir
 }
 message DownloadFileRespStream {
     message Meta {
         int32   filesize = 1;
-        bytes   sha256 = 2;
     }
     message Chunk {
         bytes   data = 1;
-        int32   offset = 2;
     }
     message FinalStatus {
         string  err = 1; // empty : success
+        bytes   sha256 = 2;
     }
     oneof value {
         Meta            meta = 1;
@@ -98,11 +95,11 @@ message DownloadFileRespStream {
 message CommandReq {
     // executable in cmd shall be relative to bin dir, as it gets executed with cur dir set to bin:
     // Rooted paths are rejected.
-    // Paths containing "/../" are rejected.
-    // Paths not beginning with ./ get prepended with ./
+    // Paths containing "/../" are cleaned.
     string          cmd = 1;
-    Duration        timeout = 2;
-    repeated string env = 3;
+    repeated string args = 2;
+    Duration        timeout = 3;
+    repeated string env = 4;
 }
 message CommandRespStream {
     message Output {
