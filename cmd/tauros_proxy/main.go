@@ -13,9 +13,9 @@ import (
 
 func main() {
 	if (len(os.Args) != 2) {
-		log.Fatal("You shall pass the target hostname.")
+		log.Fatal("You shall pass the target hostname:port.")
 	}
-	target := os.Args[1] + conf.Port
+	target := os.Args[1]
 	conn, err := grpc.Dial(target, grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
